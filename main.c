@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <memory.h>
+#include <stdbool.h>
 
-#define MY_BUFFER_SIZE 4096
+#define MY_BUFFER_SIZE 1024
 
 unsigned char mybuffer[MY_BUFFER_SIZE];
 
@@ -40,13 +41,13 @@ int myfree(void *ptr) {
     }
     printf("Deleting %i bytes of memory.\n", size_to_free);
     //Atbrīvo alocēto
-    void * allocated = ptr;
+    void *allocated = ptr;
     for (int i = 0; i < size_to_free; i++) {
         memset(allocated, 0, 1);
         allocated++;
     }
     //Atbrīvo atmiņas izmēra informāciju
-    void * size_info = ptr - 1;
+    void *size_info = ptr - 1;
     for (int j = 0; j < sizeof(int); j++) {
         memset(size_info, 0, 1);
         size_info--;
@@ -55,9 +56,28 @@ int myfree(void *ptr) {
     return 0;
 };
 
-int main() {
+int main(int argc, char **argv) {
     // Bufera sākumā glabā informāciju par tā izmantoto apjomu
     set_end(4);
+
+    bool chunks_specified = false;
+    bool sizes_specified = false;
+    char *chunk_file = NULL;
+    char *size_file = NULL;
+    int i = 1;
+    for (i; i < argc; i++) {
+        if (strcmp(argv[i], "-c") == 0) {
+            chunk_file = argv[++i];
+            chunks_specified = true;
+        } else if (strcmp(argv[i], "-s") == 0) {
+            size_file = argv[++i];
+            sizes_specified = true;
+        }
+    }
+    if (!chunks_specified || !sizes_specified) {
+        fprintf(stderr, "Argument -c or -s not specified\n");
+        return -1;
+    }
 
     void *ptr = myalloc(2);
     void *ptr2 = myalloc(4);
