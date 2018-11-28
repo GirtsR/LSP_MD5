@@ -1,71 +1,108 @@
 #include <stdio.h>
 #include <memory.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/time.h>
 
 #define MY_BUFFER_SIZE 1024
+#define BLOCK_SIZE 16
+#define BLOCK_COUNT MY_BUFFER_SIZE / BLOCK_SIZE
 
 unsigned char mybuffer[MY_BUFFER_SIZE];
 
-void set_end(int num) {
-    memcpy(&mybuffer[0], &num, sizeof(int));
-}
-int get_end() {
-    int last;
-    memcpy(&last, &mybuffer[0], sizeof(int));
-    return last;
-}
-void *myalloc(size_t size) {
-    // TODO - izmantot atbrīvoto vietu buferī
-    size_t remaining_block_size = MY_BUFFER_SIZE - get_end();
-    if (remaining_block_size < size + sizeof(int)) {
-        fprintf(stderr, "Not enough space\n");
+struct Segment *root;
+struct Segment *lastFit;
+size_t lastFitCount;
+
+struct Segment {
+    struct Segment *prev;
+    struct Segment *next;
+    size_t blockCount;// Multiply by BLOCK_SIZE to get size in bytes
+    char used;
+};
+
+void *NextFit(size_t size) {
+    if (size == 0) {
         return NULL;
-    } else {
-        printf("Allocating %zu bytes of memory.\n", size);
-        // Saglabā bloka garumu
-        memcpy(&mybuffer[get_end()], &size, sizeof(int));
-
-        // Norāde uz alocētās atmiņas bloka sākumpunktu
-        void *ptr = &mybuffer[get_end() + sizeof(int)];
-        set_end(get_end() + size + sizeof(int));
-        return ptr;
-    }
-};
-
-int myfree(void *ptr) {
-    int size_to_free;
-    memcpy(&size_to_free, ptr - sizeof(int), sizeof(int));
-    if (size_to_free == 0) {
-        fprintf(stderr, "Nothing to clear\n");
-        return -1;
-    }
-    printf("Deleting %i bytes of memory.\n", size_to_free);
-    //Atbrīvo alocēto
-    void *allocated = ptr;
-    for (int i = 0; i < size_to_free; i++) {
-        memset(allocated, 0, 1);
-        allocated++;
-    }
-    //Atbrīvo atmiņas izmēra informāciju
-    void *size_info = ptr - 1;
-    for (int j = 0; j < sizeof(int); j++) {
-        memset(size_info, 0, 1);
-        size_info--;
     }
 
-    return 0;
-};
+    struct Segment *cur = lastFit;
+    size_t curCount = lastFitCount;// Avoid recount
+    size_t neededCount = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    do {
+        if (!cur->used && neededCount <= cur->blockCount) {
+
+            if (neededCount < cur->blockCount) {
+                // Place new empty segment between current and next segment
+                struct Segment *split = malloc(sizeof(struct Segment));// Shhhh
+
+                split->prev = cur;
+                split->next = cur->next;
+                split->blockCount = cur->blockCount - neededCount;
+                split->used = 0;
+
+                if (cur->next) {
+                    cur->next->prev = split;
+                }
+                cur->next = split;
+            }
+
+            cur->used = 1;
+            cur->blockCount = neededCount;
+
+            lastFit = cur;
+            lastFitCount = curCount;
+
+            return mybuffer + curCount * BLOCK_SIZE;
+        }
+
+        if (cur->next) {
+            // Go forward
+            curCount += cur->blockCount;
+            cur = cur->next;
+        } else {
+            // Loop around
+            curCount = 0;
+            cur = root;
+        }
+    } while (cur != lastFit);
+
+    return NULL;
+}
+
+void printMemory() {
+    struct Segment *cur = root;
+
+    while (cur) {
+        printf("|");
+        for (int i = 0; i < cur->blockCount - 1; i++) {
+            printf(cur->used ? "_" : ".");
+        }
+        cur = cur->next;
+    }
+    printf("|\n");
+}
+
+void setup() {
+    root = malloc(sizeof(struct Segment));
+    root->prev = NULL;
+    root->next = NULL;
+    root->blockCount = BLOCK_COUNT;
+    root->used = 0;
+    lastFit = root;
+    lastFitCount = 0;
+}
 
 int main(int argc, char **argv) {
-    // Bufera sākumā glabā informāciju par tā izmantoto apjomu
-    set_end(4);
-
     bool chunks_specified = false;
     bool sizes_specified = false;
     char *chunk_file = NULL;
     char *size_file = NULL;
     int i = 1;
-    for (i; i < argc; i++) {
+    for (; i < argc; i++) {
         if (strcmp(argv[i], "-c") == 0) {
             chunk_file = argv[++i];
             chunks_specified = true;
@@ -79,20 +116,25 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    void *ptr = myalloc(2);
-    void *ptr2 = myalloc(4);
-    void *ptr3 = myalloc(6);
+    //TODO - set up chunks from file
+    setup();
 
-    //Trūkst vietas - atgriež NULL
-    void *ptr4 = myalloc(4096);
+    //TODO - read allocations from file
+    void *a = NextFit(128);
+    void *b = NextFit(256);
+    void *c = NextFit(512);
 
-    myfree(ptr);
-    myfree(ptr2);
-    myfree(ptr3);
-    // Jau dzēsta atmiņa - atgriež -1
-    myfree(ptr);
+    printMemory();
 
-    printf("%s\n", mybuffer);
+    void *d = NextFit(64);
+
+    printMemory();
+
+    void *e = NextFit(128);
+
+    printMemory();
+
+    return 0;
 
     return 0;
 }
