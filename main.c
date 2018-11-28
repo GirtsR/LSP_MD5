@@ -16,7 +16,7 @@ struct Segment *lastFit;
 struct Segment {
     struct Segment *prev;
     struct Segment *next;
-	void* address;
+    void *address;
     size_t size;
     char used;
 };
@@ -39,7 +39,7 @@ void *NextFit(size_t size) {
                 split->next = cur->next;
                 split->size = cur->size - size;
                 split->used = 0;
-				split->address = cur->address + size;
+                split->address = cur->address + size;
 
                 if (cur->next) {
                     cur->next->prev = split;
@@ -72,7 +72,7 @@ void printMemory() {
 
     while (cur) {
         printf("|");
-        for (int i = 0; i < (int)cur->size / 8 - 1; i++) {
+        for (int i = 0; i < (int) cur->size / 8 - 1; i++) {
             printf(cur->used ? "_" : ".");
         }
         cur = cur->next;
@@ -84,7 +84,7 @@ void printChunks() {
     struct Segment *current = root;
 
     while (current != NULL) {
-        printf("Chunk: %zu, address: %zu\n", current->size, current->address - (void*)mybuffer);
+        printf("Chunk: %zu, address: %zu\n", current->size, current->address - (void *) mybuffer);
         current = current->next;
     }
 }
@@ -95,7 +95,7 @@ struct Segment *create_node(const size_t size) {
     node->next = NULL;
     node->size = size;
     node->used = 0;
-	node->address = mybuffer;
+    node->address = mybuffer;
 
     return node;
 }
@@ -112,11 +112,71 @@ struct Segment *add_block(const size_t size) {
         previous->next = current;
         current->prev = previous;
 
-		current->address = previous->address + previous->size;
+        current->address = previous->address + previous->size;
     }
     return current;
 }
 
+struct SizeNode { // TODO: Merge this with segment
+    struct SizeNode *next;
+    size_t size;
+} sizeNode;
+
+struct SizeNode *create_size_node(size_t size) {
+    struct SizeNode *tmp = calloc(1, sizeof sizeNode);
+    tmp->size = size;
+    tmp->next = NULL;
+    return tmp;
+}
+
+void list_add_size(struct SizeNode **head, struct SizeNode **tail, size_t size) {
+    if (*head == NULL) {
+        *head = *tail = create_size_node(size);
+        return;
+    }
+
+    (*tail)->next = create_size_node(size);
+    (*tail) = (*tail)->next;
+}
+
+struct SizeNode *read_request_sizes(const char *size_file) {
+    FILE *size_input = fopen(size_file, "r");
+    size_t size = 0;
+
+    struct SizeNode *head = NULL;
+    struct SizeNode *tail = NULL;
+
+    while (fscanf(size_input, "%zu", &size) != EOF) {
+        list_add_size(&head, &tail, size);
+    }
+
+    fclose(size_input);
+
+    return head;
+}
+
+void print_sizes(struct SizeNode *sizes_head) {
+    printf("--------- Sizes start ----------\n");
+    while (sizes_head) {
+        printf("%zu\n", sizes_head->size);
+        sizes_head = sizes_head->next;
+    }
+    printf("--------- Sizes end -------------\n");
+}
+void read_chunks(const char *chunk_file) {
+    FILE *chunk_input = fopen(chunk_file, "r");
+
+    size_t cur_size = 0;
+    fscanf(chunk_input, "%zu", &cur_size);
+
+    while (!feof(chunk_input)) {
+        add_block(cur_size);
+        fscanf(chunk_input, "%zu", &cur_size);
+    }
+    fclose(chunk_input);
+
+    lastFit = root;
+}
 int main(int argc, char **argv) {
     bool chunks_specified = false;
     bool sizes_specified = false;
@@ -137,40 +197,22 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    FILE *input = fopen(chunk_file, "r");
-
-    size_t cur_size = 0;
-    fscanf(input, "%zu", &cur_size);
-
-    while (!feof(input)) {
-        add_block(cur_size);
-        fscanf(input, "%zu", &cur_size);
-    }
-    fclose(input);
-
-    lastFit = root;
-
+    read_chunks(chunk_file);
     printChunks();
 
-    printMemory();
-    //TODO - read allocations from file
-    void *a = NextFit(128);
-    void *b = NextFit(256);
-    void *c = NextFit(512);
-
+    struct SizeNode *sizes = read_request_sizes(size_file);
+    print_sizes(sizes);
     printMemory();
 
-    void *d = NextFit(64);
+    // TODO: Pass needed allocation algorithm instead. Functions needs same interface
+    void *(*allocation_algorithm)(size_t) = NextFit;
 
-    printMemory();
-
-    void *e = NextFit(128);
-
-    printMemory();
-
-	void *f = NextFit(64);
-
-	printMemory();
+    while (sizes) {
+        allocation_algorithm(sizes->size);
+        printf("Allocating size: %zu\n", sizes->size);
+        printMemory();
+        sizes = sizes->next;
+    }
 
     return 0;
 }
