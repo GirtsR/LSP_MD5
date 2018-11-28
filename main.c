@@ -7,19 +7,17 @@
 #include <sys/time.h>
 
 #define MY_BUFFER_SIZE 1024
-#define BLOCK_SIZE 16
-#define BLOCK_COUNT MY_BUFFER_SIZE / BLOCK_SIZE
 
 unsigned char mybuffer[MY_BUFFER_SIZE];
 
 struct Segment *root;
 struct Segment *lastFit;
-size_t lastFitCount;
 
 struct Segment {
     struct Segment *prev;
     struct Segment *next;
-    size_t blockCount;// Multiply by BLOCK_SIZE to get size in bytes
+	void* address;
+    size_t size;
     char used;
 };
 
@@ -29,20 +27,19 @@ void *NextFit(size_t size) {
     }
 
     struct Segment *cur = lastFit;
-    size_t curCount = lastFitCount;// Avoid recount
-    size_t neededCount = (size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     do {
-        if (!cur->used && neededCount <= cur->blockCount) {
+        if (!cur->used && size <= cur->size) {
 
-            if (neededCount < cur->blockCount) {
+            if (size < cur->size) {
                 // Place new empty segment between current and next segment
                 struct Segment *split = malloc(sizeof(struct Segment));// Shhhh
 
                 split->prev = cur;
                 split->next = cur->next;
-                split->blockCount = cur->blockCount - neededCount;
+                split->size = cur->size - size;
                 split->used = 0;
+				split->address = cur->address + size;
 
                 if (cur->next) {
                     cur->next->prev = split;
@@ -51,21 +48,18 @@ void *NextFit(size_t size) {
             }
 
             cur->used = 1;
-            cur->blockCount = neededCount;
+            cur->size = size;
 
             lastFit = cur;
-            lastFitCount = curCount;
 
-            return mybuffer + curCount * BLOCK_SIZE;
+            return cur->address;
         }
 
         if (cur->next) {
             // Go forward
-            curCount += cur->blockCount;
             cur = cur->next;
         } else {
             // Loop around
-            curCount = 0;
             cur = root;
         }
     } while (cur != lastFit);
@@ -78,18 +72,19 @@ void printMemory() {
 
     while (cur) {
         printf("|");
-        for (int i = 0; i < cur->blockCount - 1; i++) {
+        for (int i = 0; i < (int)cur->size / 8 - 1; i++) {
             printf(cur->used ? "_" : ".");
         }
         cur = cur->next;
     }
     printf("|\n");
 }
+
 void printChunks() {
     struct Segment *current = root;
 
     while (current != NULL) {
-        printf("Chunk: %zu\n", current->blockCount);
+        printf("Chunk: %zu, address: %zu\n", current->size, current->address - (void*)mybuffer);
         current = current->next;
     }
 }
@@ -98,8 +93,9 @@ struct Segment *create_node(const size_t size) {
     struct Segment *node = malloc(sizeof(struct Segment));
     node->prev = NULL;
     node->next = NULL;
-    node->blockCount = size;
+    node->size = size;
     node->used = 0;
+	node->address = mybuffer;
 
     return node;
 }
@@ -115,6 +111,8 @@ struct Segment *add_block(const size_t size) {
         }
         previous->next = current;
         current->prev = previous;
+
+		current->address = previous->address + previous->size;
     }
     return current;
 }
@@ -151,7 +149,6 @@ int main(int argc, char **argv) {
     fclose(input);
 
     lastFit = root;
-    lastFitCount = 0;
 
     printChunks();
 
@@ -170,6 +167,10 @@ int main(int argc, char **argv) {
     void *e = NextFit(128);
 
     printMemory();
+
+	void *f = NextFit(64);
+
+	printMemory();
 
     return 0;
 }
