@@ -85,15 +85,38 @@ void printMemory() {
     }
     printf("|\n");
 }
+void printChunks() {
+    struct Segment *current = root;
 
-void setup() {
-    root = malloc(sizeof(struct Segment));
-    root->prev = NULL;
-    root->next = NULL;
-    root->blockCount = BLOCK_COUNT;
-    root->used = 0;
-    lastFit = root;
-    lastFitCount = 0;
+    while (current != NULL) {
+        printf("Chunk: %zu\n", current->blockCount);
+        current = current->next;
+    }
+}
+
+struct Segment *create_node(const size_t size) {
+    struct Segment *node = malloc(sizeof(struct Segment));
+    node->prev = NULL;
+    node->next = NULL;
+    node->blockCount = size;
+    node->used = 0;
+
+    return node;
+}
+
+struct Segment *add_block(const size_t size) {
+    struct Segment *current = create_node(size);
+    struct Segment *previous = root;
+    if (root == NULL) {
+        root = current;
+    } else {
+        while (previous->next != NULL) {
+            previous = previous->next;
+        }
+        previous->next = current;
+        current->prev = previous;
+    }
+    return current;
 }
 
 int main(int argc, char **argv) {
@@ -117,8 +140,23 @@ int main(int argc, char **argv) {
     }
 
     //TODO - set up chunks from file
-    setup();
+    FILE *input = fopen("../mem-frag-tests-1/chunks1.txt", "r");
 
+    size_t cur_size = 0;
+    fscanf(input, "%zu", &cur_size);
+
+    while (!feof(input)) {
+        add_block(cur_size);
+        fscanf(input, "%zu", &cur_size);
+    }
+    fclose(input);
+
+    lastFit = root;
+    lastFitCount = 0;
+
+    printChunks();
+
+    printMemory();
     //TODO - read allocations from file
     void *a = NextFit(128);
     void *b = NextFit(256);
@@ -133,8 +171,6 @@ int main(int argc, char **argv) {
     void *e = NextFit(128);
 
     printMemory();
-
-    return 0;
 
     return 0;
 }
