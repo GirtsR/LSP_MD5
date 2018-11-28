@@ -139,8 +139,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    //TODO - set up chunks from file
-    FILE *input = fopen("../mem-frag-tests-1/chunks1.txt", "r");
+    FILE *input = fopen(chunk_file, "r");
 
     size_t cur_size = 0;
     fscanf(input, "%zu", &cur_size);
