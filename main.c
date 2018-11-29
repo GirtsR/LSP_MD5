@@ -72,7 +72,7 @@ void printMemory() {
 
     while (cur) {
         printf("|");
-        for (int i = 0; i < (int) cur->size / 8 - 1; i++) {
+        for (int i = 0; i < (int) cur->size - 1; i++) {
             printf(cur->used ? "_" : ".");
         }
         cur = cur->next;
@@ -208,8 +208,11 @@ int main(int argc, char **argv) {
     void *(*allocation_algorithm)(size_t) = NextFit;
 
     while (sizes) {
-        allocation_algorithm(sizes->size);
-        printf("Allocating size: %zu\n", sizes->size);
+        if (allocation_algorithm(sizes->size) == NULL) {
+            printf("Allocation of size %zu failed!\n", sizes->size);
+        } else {
+            printf("Allocating size: %zu\n", sizes->size);
+        }
         printMemory();
         sizes = sizes->next;
     }
