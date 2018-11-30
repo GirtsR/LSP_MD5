@@ -7,6 +7,7 @@
 #include <sys/time.h>
 
 #define MY_BUFFER_SIZE 1024
+#define MEASURE_TIME 0 // 0 - print everything, 1 - print only execution time
 
 unsigned char mybuffer[MY_BUFFER_SIZE];
 
@@ -80,7 +81,7 @@ void *BestFit(size_t size) {
 
     struct Segment *current = root;
 
-    size_t min_size_diff = SIZE_MAX;
+    size_t min_size_diff = ~(size_t)0;
     struct Segment *best_segment = NULL;
 
     while (current != NULL) {
@@ -188,15 +189,18 @@ struct Segment *add_block(const size_t size) {
     return current;
 }
 
-struct SizeNode { // TODO: Merge this with segment
+struct SizeNode {
     struct SizeNode *next;
     size_t size;
+	float fragmentation;// After allocation
+	char failed;
 } sizeNode;
 
 struct SizeNode *create_size_node(size_t size) {
     struct SizeNode *tmp = calloc(1, sizeof sizeNode);
     tmp->size = size;
     tmp->next = NULL;
+	tmp->failed = 0;
     return tmp;
 }
 
@@ -234,6 +238,7 @@ void print_sizes(struct SizeNode *sizes_head) {
     }
     printf("--------- Sizes end -------------\n");
 }
+
 void read_chunks(const char *chunk_file) {
     FILE *chunk_input = fopen(chunk_file, "r");
 
@@ -245,14 +250,53 @@ void read_chunks(const char *chunk_file) {
         fscanf(chunk_input, "%zu", &cur_size);
     }
     fclose(chunk_input);
-
-    lastFit = root; // TODO: This is NextFit specific. Should be removed
 }
+
+float getFragmentation() {
+	size_t free = 0;
+	size_t freeMax = 0;
+	struct Segment* cur = root;
+
+	while (cur) {
+		if (!cur->used) {
+			if (cur->size > freeMax) {
+				freeMax = cur->size;
+			}
+			free += cur->size;
+		}
+		cur = cur->next;
+	}
+
+	size_t freeDiff = free - freeMax;
+
+	if (freeDiff == free) {
+		return 0;
+	}
+
+	return (float)freeDiff / free * 100;
+}
+
+float initialFragmentation;
+
+struct timeval timerStart() {
+	struct timeval timeNow;
+	gettimeofday(&timeNow, NULL);
+	return timeNow;
+}
+
+long timerStop(struct timeval timeStart) {
+	struct timeval timeNow, timeResult;
+	gettimeofday(&timeNow, NULL);
+	timersub(&timeNow, &timeStart, &timeResult);
+	return timeResult.tv_usec;
+}
+
 int main(int argc, char **argv) {
     bool chunks_specified = false;
     bool sizes_specified = false;
     char *chunk_file = NULL;
     char *size_file = NULL;
+
     int i = 1;
     for (; i < argc; i++) {
         if (strcmp(argv[i], "-c") == 0) {
@@ -263,30 +307,51 @@ int main(int argc, char **argv) {
             sizes_specified = true;
         }
     }
+
     if (!chunks_specified || !sizes_specified) {
         fprintf(stderr, "Argument -c or -s not specified\n");
         return -1;
     }
 
     read_chunks(chunk_file);
-    printChunks();
-
     struct SizeNode *sizes = read_request_sizes(size_file);
-    print_sizes(sizes);
-    printMemory();
+	lastFit = root;
+	initialFragmentation = getFragmentation();
+
+	printChunks();
+	print_sizes(sizes);
+	printMemory();
+	printf("Initial fragmentation: %.1f%%\n", initialFragmentation);
 
     // TODO: Pass needed allocation algorithm instead. Functions needs same interface
     void *(*allocation_algorithm)(size_t) = BestFit;
 
+#if MEASURE_TIME
+	struct timeval startTime = timerStart();
+
+	while (sizes) {
+		if (allocation_algorithm(sizes->size) == NULL) {
+			sizes->failed = 1;
+		}
+		sizes = sizes->next;
+	}
+
+	long endTime = timerStop(startTime);
+	printf("Time: %0ldus\n", endTime);// Microseconds
+#else
     while (sizes) {
         if (allocation_algorithm(sizes->size) == NULL) {
             printf("Allocation of size %zu failed!\n", sizes->size);
+			sizes->failed = 1;
         } else {
             printf("Allocating size: %zu\n", sizes->size);
         }
+		sizes->fragmentation = getFragmentation();
+		printf("Fragmentation: %.1f%%\n", sizes->fragmentation);
         printMemory();
         sizes = sizes->next;
     }
+#endif
 
     return 0;
 }
