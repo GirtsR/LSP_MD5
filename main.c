@@ -48,6 +48,56 @@ void *allocate_from_block(struct Segment **segment, size_t size) {
     return (*segment)->address;
 }
 
+void *WorstFit(size_t size) {
+    if (size == 0) {
+        return NULL;
+    }
+
+    struct Segment *current = root;
+
+    size_t max_size = 0;
+    struct Segment *max_segment = NULL;
+
+    while (current != NULL) {
+        if (current->size > max_size && !current->used) {
+            max_segment = current;
+            max_size = current->size;
+        }
+        current = current->next;
+    }
+
+    if (max_segment == NULL) {
+        return NULL;
+    } else {
+        return allocate_from_block(&max_segment, size);
+    }
+}
+
+void *BestFit(size_t size) {
+    if (size == 0) {
+        return NULL;
+    }
+
+    struct Segment *current = root;
+
+    size_t min_size_diff = SIZE_MAX;
+    struct Segment *best_segment = NULL;
+
+    while (current != NULL) {
+        if ((current->size >= size) && (current->size - size < min_size_diff) && !current->used) {
+            best_segment = current;
+            min_size_diff = current->size - size;
+        }
+        current = current->next;
+    }
+
+    if (best_segment == NULL) {
+        return NULL;
+    } else {
+        return allocate_from_block(&best_segment, size);
+    }
+}
+
 void *NextFit(size_t size) {
     if (size == 0) {
         return NULL;
@@ -226,7 +276,7 @@ int main(int argc, char **argv) {
     printMemory();
 
     // TODO: Pass needed allocation algorithm instead. Functions needs same interface
-    void *(*allocation_algorithm)(size_t) = FirstFit;
+    void *(*allocation_algorithm)(size_t) = BestFit;
 
     while (sizes) {
         if (allocation_algorithm(sizes->size) == NULL) {
