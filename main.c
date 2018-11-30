@@ -21,6 +21,33 @@ struct Segment {
     char used;
 };
 
+void *allocate_from_block(struct Segment **segment, size_t size) {
+    if ((*segment)->size < size) {
+        fprintf(stderr, "Error allocating block of size %zu\n", size);
+        return NULL;
+    }
+
+    if (size < (*segment)->size) {
+        // Place new empty segment between current and next segment
+        struct Segment *split = malloc(sizeof *split);
+
+        split->prev = (*segment);
+        split->next = (*segment)->next;
+        split->size = (*segment)->size - size;
+        split->used = 0;
+        split->address = (*segment)->address + size;
+
+        if ((*segment)->next) {
+            (*segment)->next->prev = split;
+        }
+        (*segment)->next = split;
+    }
+
+    (*segment)->size = size;
+    (*segment)->used = 1;
+    return (*segment)->address;
+}
+
 void *NextFit(size_t size) {
     if (size == 0) {
         return NULL;
@@ -30,29 +57,9 @@ void *NextFit(size_t size) {
 
     do {
         if (!cur->used && size <= cur->size) {
-
-            if (size < cur->size) {
-                // Place new empty segment between current and next segment
-                struct Segment *split = malloc(sizeof(struct Segment));// Shhhh
-
-                split->prev = cur;
-                split->next = cur->next;
-                split->size = cur->size - size;
-                split->used = 0;
-                split->address = cur->address + size;
-
-                if (cur->next) {
-                    cur->next->prev = split;
-                }
-                cur->next = split;
-            }
-
-            cur->used = 1;
-            cur->size = size;
-
+            void *address = allocate_from_block(&cur, size);
             lastFit = cur;
-
-            return cur->address;
+            return address;
         }
 
         if (cur->next) {
@@ -67,12 +74,26 @@ void *NextFit(size_t size) {
     return NULL;
 }
 
+void *FirstFit(size_t size) {
+    struct Segment *tmp_node = root;
+    while (tmp_node && (tmp_node->used || tmp_node->size < size)) {
+        tmp_node = tmp_node->next;
+    }
+
+    if (!tmp_node) {
+        return NULL;
+    }
+
+    return allocate_from_block(&tmp_node, size);
+}
+
 void printMemory() {
     struct Segment *cur = root;
 
     while (cur) {
         printf("|");
-        for (int i = 0; i < (int) cur->size - 1; i++) {
+        int i;
+        for (i = 0; i < (int) cur->size - 1; i++) {
             printf(cur->used ? "_" : ".");
         }
         cur = cur->next;
@@ -175,7 +196,7 @@ void read_chunks(const char *chunk_file) {
     }
     fclose(chunk_input);
 
-    lastFit = root;
+    lastFit = root; // TODO: This is NextFit specific. Should be removed
 }
 int main(int argc, char **argv) {
     bool chunks_specified = false;
@@ -205,7 +226,7 @@ int main(int argc, char **argv) {
     printMemory();
 
     // TODO: Pass needed allocation algorithm instead. Functions needs same interface
-    void *(*allocation_algorithm)(size_t) = NextFit;
+    void *(*allocation_algorithm)(size_t) = FirstFit;
 
     while (sizes) {
         if (allocation_algorithm(sizes->size) == NULL) {
