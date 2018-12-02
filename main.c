@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <memory.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -318,8 +317,8 @@ void test_algorithm(struct SizeNode *sizes, void *(*allocation_algorithm)(size_t
 }
 
 int main(int argc, char **argv) {
-    bool chunks_specified = false;
-    bool sizes_specified = false;
+    char chunks_specified = 0;
+    char sizes_specified = 0;
     char *chunk_file = NULL;
     char *size_file = NULL;
 
@@ -327,10 +326,10 @@ int main(int argc, char **argv) {
     for (; i < argc; i++) {
         if (strcmp(argv[i], "-c") == 0) {
             chunk_file = argv[++i];
-            chunks_specified = true;
+            chunks_specified = 1;
         } else if (strcmp(argv[i], "-s") == 0) {
             size_file = argv[++i];
-            sizes_specified = true;
+            sizes_specified = 1;
         }
     }
 
