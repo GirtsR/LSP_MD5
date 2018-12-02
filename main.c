@@ -292,9 +292,25 @@ long timerStop(struct timeval timeStart) {
     return timeResult.tv_usec;
 }
 
-void test_algorithm(struct SizeNode *sizes, void *(*allocation_algorithm)(size_t)) {
-    printf("Initial fragmentation: %.1f%%\n", getFragmentation());
-
+size_t total_requested(struct SizeNode *sizes) {
+    size_t total = 0;
+    while (sizes) {
+        total += sizes->size;
+        sizes = sizes->next;
+    }
+    return total;
+}
+size_t total_allocated(struct SizeNode *sizes) {
+    size_t total = 0;
+    while (sizes) {
+        if (!sizes->failed) {
+            total += sizes->size;
+        }
+        sizes = sizes->next;
+    }
+    return total;
+}
+void allocate_and_test_time(struct SizeNode *sizes, void *(*allocation_algorithm)(size_t)) {
     struct timeval startTime = timerStart();
     while (sizes) {
         if (allocation_algorithm(sizes->size) == NULL) {
@@ -313,7 +329,6 @@ void test_algorithm(struct SizeNode *sizes, void *(*allocation_algorithm)(size_t
 
     long endTime = timerStop(startTime);
     printf("Time for allocation: %0ldus\n", endTime); /* Microseconds */
-    printf("Fragmentation after test: \n");
 }
 
 int main(int argc, char **argv) {
@@ -347,7 +362,12 @@ int main(int argc, char **argv) {
     printMemory();
     #endif
 
-    test_algorithm(sizes, BestFit);
+    printf("Initial fragmentation: %.1f%%\n", getFragmentation());
+
+    allocate_and_test_time(sizes, WorstFit);
+
+    printf("Total requested/Total allocated (bytes): %zu/%zu\n", total_requested(sizes), total_allocated(sizes));
+    printf("Fragmentation after test: \n");
 
     return 0;
 }
