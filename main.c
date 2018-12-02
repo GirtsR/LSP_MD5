@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <memory.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 #include <sys/time.h>
 
 #define MY_BUFFER_SIZE 1024
@@ -331,6 +329,27 @@ void allocate_and_test_time(struct SizeNode *sizes, void *(*allocation_algorithm
     printf("Time for allocation: %0ldus\n", endTime); /* Microseconds */
 }
 
+size_t total_used() {
+    struct Segment *tmp = root;
+    size_t total = 0;
+    while (tmp) {
+        if (tmp->used) {
+            total += tmp->size;
+        }
+        tmp = tmp->next;
+    }
+    return total;
+}
+
+size_t total_memory() {
+    struct Segment *tmp = root;
+    size_t total = 0;
+    while (tmp) {
+        total += tmp->size;
+        tmp = tmp->next;
+    }
+    return total;
+}
 int main(int argc, char **argv) {
     char chunks_specified = 0;
     char sizes_specified = 0;
@@ -362,15 +381,16 @@ int main(int argc, char **argv) {
     printMemory();
     #endif
 
-    printf("Initial fragmentation: %.1f%%\n", getFragmentation());
+    printf("\n-------------- Initial -----------------\n");
+    printf("Fragmentation: %.1f%%\n", getFragmentation());
+    printf("Total available/used: %zu/%zu\n", total_memory(), total_used());
 
+    printf("\n-------------- Test --------------------\n");
     allocate_and_test_time(sizes, NextFit);
 
-    size_t requested = total_requested(sizes);
-    size_t allocated = total_allocated(sizes);
-    printf("Total requested/allocated: %zu/%zu\n", requested, allocated);
-
-    printf("Fragmentation after test: %.1f%%\n", getFragmentation());
-
+    printf("\n-------------- After test --------------\n");
+    printf("Fragmentation: %.1f%%\n", getFragmentation());
+    printf("Total available/used: %zu/%zu\n", total_memory(), total_used());
+    printf("Total requested/allocated: %zu/%zu\n", total_requested(sizes), total_allocated(sizes));
     return 0;
 }
