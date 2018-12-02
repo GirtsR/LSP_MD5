@@ -364,10 +364,13 @@ int main(int argc, char **argv) {
 
     printf("Initial fragmentation: %.1f%%\n", getFragmentation());
 
-    allocate_and_test_time(sizes, WorstFit);
+    allocate_and_test_time(sizes, NextFit);
 
-    printf("Total requested/Total allocated (bytes): %zu/%zu\n", total_requested(sizes), total_allocated(sizes));
-    printf("Fragmentation after test: \n");
+    size_t requested = total_requested(sizes);
+    size_t allocated = total_allocated(sizes);
+    printf("Total requested/allocated: %zu/%zu\n", requested, allocated);
+
+    printf("Fragmentation after test: %.1f%%\n", getFragmentation());
 
     return 0;
 }
