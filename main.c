@@ -7,7 +7,7 @@
 #include <sys/time.h>
 
 #define MY_BUFFER_SIZE 1024
-#define MEASURE_TIME 0 // 0 - print everything, 1 - print only execution time
+#define DEBUG 0 /* 0 - do not include debug code, 1 - include debug code */
 
 unsigned char mybuffer[MY_BUFFER_SIZE];
 
@@ -24,12 +24,14 @@ struct Segment {
 
 void *allocate_from_block(struct Segment **segment, size_t size) {
     if ((*segment)->size < size) {
+        #if DEBUG
         fprintf(stderr, "Error allocating block of size %zu\n", size);
+        #endif
         return NULL;
     }
 
     if (size < (*segment)->size) {
-        // Place new empty segment between current and next segment
+        /* Place new empty segment between current and next segment */
         struct Segment *split = malloc(sizeof *split);
 
         split->prev = (*segment);
@@ -114,10 +116,10 @@ void *NextFit(size_t size) {
         }
 
         if (cur->next) {
-            // Go forward
+            /* Go forward */
             cur = cur->next;
         } else {
-            // Loop around
+            /* Loop around */
             cur = root;
         }
     } while (cur != lastFit);
@@ -192,7 +194,7 @@ struct Segment *add_block(const size_t size) {
 struct SizeNode {
     struct SizeNode *next;
     size_t size;
-    float fragmentation;// After allocation
+    float fragmentation; /* After allocation */
     char failed;
 } sizeNode;
 
@@ -249,6 +251,8 @@ void read_chunks(const char *chunk_file) {
         add_block(cur_size);
         fscanf(chunk_input, "%zu", &cur_size);
     }
+
+    lastFit = root;
     fclose(chunk_input);
 }
 
@@ -289,6 +293,30 @@ long timerStop(struct timeval timeStart) {
     return timeResult.tv_usec;
 }
 
+void test_algorithm(struct SizeNode *sizes, void *(*allocation_algorithm)(size_t)) {
+    printf("Initial fragmentation: %.1f%%\n", getFragmentation());
+
+    struct timeval startTime = timerStart();
+    while (sizes) {
+        if (allocation_algorithm(sizes->size) == NULL) {
+            #if DEBUG
+            printf("Allocation of size %zu failed!\n", sizes->size);
+            #endif
+            sizes->failed = 1;
+        }
+        #if DEBUG
+        sizes->fragmentation = getFragmentation();
+        printf("Fragmentation: %.1f%%\n", sizes->fragmentation);
+        printMemory();
+        #endif
+        sizes = sizes->next;
+    }
+
+    long endTime = timerStop(startTime);
+    printf("Time for allocation: %0ldus\n", endTime); /* Microseconds */
+    printf("Fragmentation after test: \n");
+}
+
 int main(int argc, char **argv) {
     bool chunks_specified = false;
     bool sizes_specified = false;
@@ -313,43 +341,14 @@ int main(int argc, char **argv) {
 
     read_chunks(chunk_file);
     struct SizeNode *sizes = read_request_sizes(size_file);
-    lastFit = root;
-    float initialFragmentation = getFragmentation();
 
+    #if DEBUG
     printChunks();
     print_sizes(sizes);
     printMemory();
-    printf("Initial fragmentation: %.1f%%\n", initialFragmentation);
+    #endif
 
-    // TODO: Pass needed allocation algorithm instead. Functions needs same interface
-    void *(*allocation_algorithm)(size_t) = BestFit;
-
-#if MEASURE_TIME
-    struct timeval startTime = timerStart();
-
-    while (sizes) {
-        if (allocation_algorithm(sizes->size) == NULL) {
-            sizes->failed = 1;
-        }
-        sizes = sizes->next;
-    }
-
-    long endTime = timerStop(startTime);
-    printf("Time: %0ldus\n", endTime);// Microseconds
-#else
-    while (sizes) {
-        if (allocation_algorithm(sizes->size) == NULL) {
-            printf("Allocation of size %zu failed!\n", sizes->size);
-            sizes->failed = 1;
-        } else {
-            printf("Allocating size: %zu\n", sizes->size);
-        }
-        sizes->fragmentation = getFragmentation();
-        printf("Fragmentation: %.1f%%\n", sizes->fragmentation);
-        printMemory();
-        sizes = sizes->next;
-    }
-#endif
+    test_algorithm(sizes, BestFit);
 
     return 0;
 }
