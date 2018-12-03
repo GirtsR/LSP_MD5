@@ -386,7 +386,7 @@ int main(int argc, char **argv) {
     printf("Total available/used: %zu/%zu\n", total_memory(), total_used());
 
     printf("\n-------------- Test --------------------\n");
-    allocate_and_test_time(sizes, NextFit);
+    allocate_and_test_time(sizes, BestFit);
 
     printf("\n-------------- After test --------------\n");
     printf("Fragmentation: %.1f%%\n", getFragmentation());
